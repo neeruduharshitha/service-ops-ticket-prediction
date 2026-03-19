@@ -1,0 +1,10 @@
+feature,importance,std
+priority,0.68973,0.00889
+category,0.4097,0.00935
+reassignments,0.00068,0.00095
+day_of_week,0.00026,0.0002
+hour_of_day,0.00019,0.00019
+region,0.00011,0.00017
+team,6e-05,0.00023
+is_weekend,1e-05,3e-05
+channel,-6e-05,0.00028

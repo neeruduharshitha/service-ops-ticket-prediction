@@ -1,0 +1,6 @@
+team,tickets,avg_hours,avg_sat,sla_breach_pct
+Team-Alpha,99521,15.37,4.8,19.5
+Team-Beta,100436,15.35,4.8,19.4
+Team-Delta,100211,15.3,4.8,19.1
+Team-Epsilon,99664,15.43,4.8,19.5
+Team-Gamma,100168,15.33,4.8,19.5

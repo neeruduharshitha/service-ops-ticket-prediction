@@ -1,0 +1,25 @@
+{
+  "generated_tickets": 500000,
+  "model_results": {
+    "Ridge Regression": {
+      "MAE_hours": 6.154,
+      "RMSE_log": 0.4808,
+      "R2": 0.1161
+    },
+    "Random Forest": {
+      "MAE_hours": 4.342,
+      "RMSE_log": 0.3494,
+      "R2": 0.5332
+    },
+    "Gradient Boosting": {
+      "MAE_hours": 4.33,
+      "RMSE_log": 0.3486,
+      "R2": 0.5354
+    }
+  },
+  "best_model": "Gradient Boosting",
+  "best_r2": 0.5353742555093333,
+  "overall_sla_breach_pct": 19.39,
+  "avg_processing_hours": 15.36,
+  "median_processing_hours": 13.06
+}

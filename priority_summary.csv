@@ -1,0 +1,5 @@
+priority,tickets,avg_hours,sla_breach_pct
+Critical,24757,6.0,75.1
+High,100212,10.36,63.2
+Low,124940,22.26,1.5
+Medium,250091,14.84,5.2

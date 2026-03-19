@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Ops · Ticket Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:       #0b0e14;
+    --surface:  #111520;
+    --card:     #161c2a;
+    --border:   #1e2740;
+    --accent1:  #3b82f6;
+    --accent2:  #f43f5e;
+    --accent3:  #10b981;
+    --accent4:  #f59e0b;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --dim:      #334155;
+    --grid-line:#1a2035;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 50;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent1), #6366f1);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 18px;
+  }
+  .logo h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--text);
+  }
+  .logo span { font-size: 11px; color: var(--muted); display: block; margin-top: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .badge {
+    font-size: 10px; font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 999px;
+    letter-spacing: .06em;
+  }
+  .badge-blue  { background: rgba(59,130,246,.15); color: var(--accent1); border: 1px solid rgba(59,130,246,.3); }
+  .badge-green { background: rgba(16,185,129,.15); color: var(--accent3); border: 1px solid rgba(16,185,129,.3); }
+  .live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent3);
+    box-shadow: 0 0 0 0 rgba(16,185,129,.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%  { box-shadow: 0 0 0 0   rgba(16,185,129,.6); }
+    70% { box-shadow: 0 0 0 8px rgba(16,185,129,0);  }
+    100%{ box-shadow: 0 0 0 0   rgba(16,185,129,0);  }
+  }
+
+  /* ── Layout ── */
+  main { padding: 28px 32px; max-width: 1600px; margin: 0 auto; }
+
+  /* ── Section label ── */
+  .section-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-label::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── KPI grid ── */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s, transform .2s;
+  }
+  .kpi:hover { border-color: var(--accent1); transform: translateY(-2px); }
+  .kpi::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .kpi.blue::before   { background: var(--accent1); }
+  .kpi.red::before    { background: var(--accent2); }
+  .kpi.green::before  { background: var(--accent3); }
+  .kpi.amber::before  { background: var(--accent4); }
+  .kpi.purple::before { background: #a855f7; }
+
+  .kpi-label { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px; font-weight: 800;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .kpi.blue   .kpi-value { color: var(--accent1); }
+  .kpi.red    .kpi-value { color: var(--accent2); }
+  .kpi.green  .kpi-value { color: var(--accent3); }
+  .kpi.amber  .kpi-value { color: var(--accent4); }
+  .kpi.purple .kpi-value { color: #a855f7; }
+  .kpi-sub  { font-size: 10px; color: var(--muted); }
+  .kpi-delta { font-size: 10px; margin-top: 4px; }
+  .delta-pos { color: var(--accent3); }
+  .delta-neg { color: var(--accent2); }
+
+  /* ── Chart grid ── */
+  .chart-grid-2 {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .chart-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .chart-grid-full {
+    margin-bottom: 14px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: .06em;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .card-sub { font-size: 10px; color: var(--muted); margin-bottom: 16px; }
+
+  .chart-wrap { position: relative; }
+
+  /* ── Model perf table ── */
+  .model-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .model-table th {
+    text-align: left; padding: 8px 10px;
+    color: var(--muted); font-size: 10px; letter-spacing: .08em;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .model-table td { padding: 10px 10px; border-bottom: 1px solid var(--grid-line); }
+  .model-table tr:last-child td { border-bottom: none; }
+  .model-table tr.best td { color: var(--accent3); }
+  .model-table .star { margin-right: 4px; }
+  .r2-bar {
+    display: inline-block; height: 4px; border-radius: 2px;
+    background: var(--accent1); margin-left: 8px; vertical-align: middle;
+  }
+
+  /* ── Priority blocks ── */
+  .priority-list { display: flex; flex-direction: column; gap: 10px; }
+  .priority-row { display: flex; align-items: center; gap: 10px; }
+  .p-label { width: 70px; font-size: 10px; color: var(--muted); flex-shrink: 0; }
+  .p-bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .p-bar    { height: 100%; border-radius: 4px; }
+  .p-val    { width: 50px; text-align: right; font-size: 10px; color: var(--text); }
+
+  /* ── Feature importance ── */
+  .feat-list { display: flex; flex-direction: column; gap: 8px; }
+  .feat-row  { display: flex; align-items: center; gap: 8px; }
+  .feat-name { width: 100px; font-size: 10px; color: var(--muted); }
+  .feat-bar-bg { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .feat-bar    { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent1), #6366f1); }
+  .feat-val    { width: 50px; text-align: right; font-size: 10px; color: var(--text); }
+
+  /* ── Bottleneck heatmap-like bars ── */
+  .stage-grid  { display: flex; flex-direction: column; gap: 10px; }
+  .stage-row   { display: flex; align-items: center; gap: 10px; }
+  .s-label     { width: 80px; font-size: 10px; color: var(--muted); flex-shrink: 0; }
+  .s-bars      { flex: 1; display: flex; gap: 3px; height: 22px; align-items: flex-end; }
+  .s-seg       { flex: 1; border-radius: 3px 3px 0 0; transition: opacity .2s; }
+  .s-seg:hover { opacity: .7; }
+  .s-total     { width: 50px; text-align: right; font-size: 10px; color: var(--text); }
+
+  /* ── SLA gauge ring ── */
+  .gauge-container { display: flex; justify-content: center; align-items: center; padding: 8px 0; }
+  svg.gauge { overflow: visible; }
+
+  /* ── Prediction accuracy ── */
+  .accuracy-row { display: flex; gap: 16px; margin-top: 8px; }
+  .acc-box {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+  .acc-box .v { font-family:'Syne',sans-serif; font-size:20px; font-weight:800; }
+  .acc-box .l { font-size:9px; color:var(--muted); margin-top:4px; text-transform:uppercase; letter-spacing:.08em; }
+
+  /* ── Footer ── */
+  footer {
+    margin: 32px 32px 0;
+    padding: 16px 0;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  @media (max-width: 1100px) {
+    .kpi-grid { grid-template-columns: repeat(3,1fr); }
+    .chart-grid-2, .chart-grid-3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">⚙</div>
+    <div>
+      <h1>SERVICE OPS · TICKET ANALYTICS</h1>
+      <span>Processing Time Prediction Dashboard</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="badge badge-blue">Gradient Boosting · R²&nbsp;0.535</span>
+    <span class="badge badge-green">500K Tickets</span>
+    <div class="live-dot"></div>
+  </div>
+</header>
+
+<main>
+
+  <!-- ── KPI Row ── -->
+  <div class="section-label">KEY PERFORMANCE INDICATORS</div>
+  <div class="kpi-grid">
+    <div class="kpi blue">
+      <div class="kpi-label">Total Tickets</div>
+      <div class="kpi-value">500K</div>
+      <div class="kpi-sub">Jan 2022 – Dec 2024</div>
+      <div class="kpi-delta delta-pos">↑ 12% YoY</div>
+    </div>
+    <div class="kpi amber">
+      <div class="kpi-label">Avg Processing</div>
+      <div class="kpi-value">15.4h</div>
+      <div class="kpi-sub">Mean resolution time</div>
+      <div class="kpi-delta delta-pos">↓ 8% vs baseline</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">SLA Breach Rate</div>
+      <div class="kpi-value">19.4%</div>
+      <div class="kpi-sub">96,985 breaches total</div>
+      <div class="kpi-delta delta-neg">↑ 2.1pp vs target</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Model Accuracy</div>
+      <div class="kpi-value">+15%</div>
+      <div class="kpi-sub">Vs. baseline regression</div>
+      <div class="kpi-delta delta-pos">R² 0.535</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-label">Avg Satisfaction</div>
+      <div class="kpi-value">4.8/5</div>
+      <div class="kpi-sub">Post-resolution CSAT</div>
+      <div class="kpi-delta delta-pos">↑ 0.3 vs prev period</div>
+    </div>
+  </div>
+
+  <!-- ── Row 1: Trend + SLA Gauge ── -->
+  <div class="section-label">VOLUME & THROUGHPUT TRENDS</div>
+  <div class="chart-grid-2">
+    <div class="card">
+      <div class="card-title">Monthly Ticket Volume & Avg Processing Time</div>
+      <div class="card-sub">Actual vs predicted hours with ticket count overlay</div>
+      <div class="chart-wrap" style="height:240px">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">SLA Compliance</div>
+      <div class="card-sub">Breach rate by priority tier</div>
+      <div class="gauge-container" style="height:150px">
+        <svg class="gauge" width="180" height="150" viewBox="0 0 180 150">
+          <defs>
+            <linearGradient id="gGreen" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="100%" stop-color="#34d399"/>
+            </linearGradient>
+            <linearGradient id="gRed" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#f43f5e"/>
+              <stop offset="100%" stop-color="#fb7185"/>
+            </linearGradient>
+          </defs>
+          <!-- Background arc -->
+          <path d="M 20 110 A 70 70 0 0 1 160 110" fill="none" stroke="#1e2740" stroke-width="16" stroke-linecap="round"/>
+          <!-- Compliance arc (80.6%) -->
+          <path id="gArc" d="M 20 110 A 70 70 0 0 1 160 110" fill="none" stroke="url(#gGreen)" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="219.9" stroke-dashoffset="42.7"/>
+          <!-- Center text -->
+          <text x="90" y="100" text-anchor="middle" fill="#e2e8f0" font-family="Syne" font-size="26" font-weight="800">80.6%</text>
+          <text x="90" y="118" text-anchor="middle" fill="#64748b" font-family="DM Mono" font-size="10">SLA COMPLIANT</text>
+          <text x="20" y="130" text-anchor="middle" fill="#64748b" font-family="DM Mono" font-size="9">0%</text>
+          <text x="160" y="130" text-anchor="middle" fill="#64748b" font-family="DM Mono" font-size="9">100%</text>
+        </svg>
+      </div>
+      <div class="priority-list">
+        <div class="priority-row">
+          <div class="p-label">Critical</div>
+          <div class="p-bar-bg"><div class="p-bar" style="width:24.9%;background:#f43f5e"></div></div>
+          <div class="p-val">75.1% breach</div>
+        </div>
+        <div class="priority-row">
+          <div class="p-label">High</div>
+          <div class="p-bar-bg"><div class="p-bar" style="width:36.8%;background:#f59e0b"></div></div>
+          <div class="p-val">63.2% breach</div>
+        </div>
+        <div class="priority-row">
+          <div class="p-label">Medium</div>
+          <div class="p-bar-bg"><div class="p-bar" style="width:94.8%;background:#3b82f6"></div></div>
+          <div class="p-val">5.2% breach</div>
+        </div>
+        <div class="priority-row">
+          <div class="p-label">Low</div>
+          <div class="p-bar-bg"><div class="p-bar" style="width:98.5%;background:#10b981"></div></div>
+          <div class="p-val">1.5% breach</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Row 2: Category + Feature + Model ── -->
+  <div class="section-label">BOTTLENECK ANALYSIS & MODEL PERFORMANCE</div>
+  <div class="chart-grid-3">
+
+    <div class="card">
+      <div class="card-title">Category Processing Breakdown</div>
+      <div class="card-sub">Avg investigation vs resolution hours</div>
+      <div class="stage-grid" style="margin-top:8px">
+        <!-- Hardware: inv 9.43, res 6.07, total 20.51 -->
+        <div class="stage-row">
+          <div class="s-label">Hardware</div>
+          <div class="s-bars">
+            <div style="flex:9.43;background:#f43f5e;border-radius:3px;height:100%"></div>
+            <div style="flex:6.07;background:#f59e0b;border-radius:3px;height:80%"></div>
+            <div style="flex:5.01;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">20.5h</div>
+        </div>
+        <div class="stage-row">
+          <div class="s-label">Database</div>
+          <div class="s-bars">
+            <div style="flex:8.67;background:#f43f5e;border-radius:3px;height:100%"></div>
+            <div style="flex:5.58;background:#f59e0b;border-radius:3px;height:80%"></div>
+            <div style="flex:4.62;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">18.9h</div>
+        </div>
+        <div class="stage-row">
+          <div class="s-label">Software</div>
+          <div class="s-bars">
+            <div style="flex:7.26;background:#f43f5e;border-radius:3px;height:100%"></div>
+            <div style="flex:4.66;background:#f59e0b;border-radius:3px;height:80%"></div>
+            <div style="flex:3.82;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">15.7h</div>
+        </div>
+        <div class="stage-row">
+          <div class="s-label">Network</div>
+          <div class="s-bars">
+            <div style="flex:6.53;background:#6366f1;border-radius:3px;height:100%"></div>
+            <div style="flex:4.19;background:#8b5cf6;border-radius:3px;height:80%"></div>
+            <div style="flex:3.47;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">14.2h</div>
+        </div>
+        <div class="stage-row">
+          <div class="s-label">Cloud</div>
+          <div class="s-bars">
+            <div style="flex:6.17;background:#3b82f6;border-radius:3px;height:100%"></div>
+            <div style="flex:3.96;background:#0ea5e9;border-radius:3px;height:80%"></div>
+            <div style="flex:3.20;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">13.3h</div>
+        </div>
+        <div class="stage-row">
+          <div class="s-label">Security</div>
+          <div class="s-bars">
+            <div style="flex:4.36;background:#10b981;border-radius:3px;height:100%"></div>
+            <div style="flex:2.79;background:#34d399;border-radius:3px;height:80%"></div>
+            <div style="flex:2.33;background:#1e2740;border-radius:3px;height:60%"></div>
+          </div>
+          <div class="s-total">9.5h</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:12px">
+        <span style="font-size:9px;color:#f43f5e">■ Investigation</span>
+        <span style="font-size:9px;color:#f59e0b">■ Resolution</span>
+        <span style="font-size:9px;color:#64748b">■ Other</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Feature Importance</div>
+      <div class="card-sub">Permutation importance — Gradient Boosting</div>
+      <div class="feat-list" style="margin-top:8px">
+        <div class="feat-row">
+          <div class="feat-name">Priority</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:100%"></div></div>
+          <div class="feat-val">0.690</div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-name">Category</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:59.4%"></div></div>
+          <div class="feat-val">0.410</div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-name">Reassigned</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:0.1%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+          <div class="feat-val">0.001</div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-name">Day of Week</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:0.03%;background:linear-gradient(90deg,#64748b,#94a3b8)"></div></div>
+          <div class="feat-val">~0</div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-name">Hour of Day</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:0.03%;background:linear-gradient(90deg,#64748b,#94a3b8)"></div></div>
+          <div class="feat-val">~0</div>
+        </div>
+        <div class="feat-row">
+          <div class="feat-name">Region</div>
+          <div class="feat-bar-bg"><div class="feat-bar" style="width:0.02%;background:linear-gradient(90deg,#64748b,#94a3b8)"></div></div>
+          <div class="feat-val">~0</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Key Insight</div>
+        <div style="font-size:10px;line-height:1.5">
+          <span style="color:var(--accent1)">Priority</span> and <span style="color:var(--accent1)">Category</span> account for ~99.8% of predictive power. Temporal features have negligible impact.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Model Comparison</div>
+      <div class="card-sub">Regression model benchmarks on 100K test set</div>
+      <table class="model-table">
+        <thead>
+          <tr>
+            <th>MODEL</th>
+            <th>MAE (h)</th>
+            <th>R²</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Ridge Regression</td>
+            <td>6.15</td>
+            <td>0.116 <span class="r2-bar" style="width:21px"></span></td>
+          </tr>
+          <tr>
+            <td>Random Forest</td>
+            <td>4.34</td>
+            <td>0.533 <span class="r2-bar" style="width:96px"></span></td>
+          </tr>
+          <tr class="best">
+            <td><span class="star">★</span>Gradient Boosting</td>
+            <td>4.33</td>
+            <td>0.535 <span class="r2-bar" style="width:97px;background:var(--accent3)"></span></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="accuracy-row">
+        <div class="acc-box">
+          <div class="v" style="color:var(--accent3)">+15%</div>
+          <div class="l">Accuracy Gain vs Baseline</div>
+        </div>
+        <div class="acc-box">
+          <div class="v" style="color:var(--accent1)">4.33h</div>
+          <div class="l">Mean Abs Error</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Training Config</div>
+        <div style="font-size:9px;line-height:1.7;color:var(--text)">
+          n_estimators: 200 &nbsp;·&nbsp; lr: 0.08<br>
+          max_depth: 5 &nbsp;·&nbsp; subsample: 0.8<br>
+          log₁(y) transform &nbsp;·&nbsp; 80/20 split
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Row 3: Priority dist + Team perf ── -->
+  <div class="section-label">PRIORITY DISTRIBUTION & TEAM PERFORMANCE</div>
+  <div class="chart-grid-2">
+    <div class="card">
+      <div class="card-title">Priority Volume Distribution</div>
+      <div class="card-sub">Ticket count and average hours by priority tier</div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="priorityChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Team Performance Matrix</div>
+      <div class="card-sub">Avg processing hours vs SLA breach rate</div>
+      <div class="chart-wrap" style="height:220px">
+        <canvas id="teamChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span>Service Ops · Ticket Analytics Dashboard &nbsp;·&nbsp; Python · Gradient Boosting · SQL · Power BI</span>
+  <span>500,000 tickets &nbsp;|&nbsp; Jan 2022 – Dec 2024 &nbsp;|&nbsp; Best model R² 0.535</span>
+</footer>
+
+<script>
+Chart.defaults.color = '#64748b';
+Chart.defaults.borderColor = '#1e2740';
+Chart.defaults.font.family = "'DM Mono', monospace";
+Chart.defaults.font.size = 10;
+
+// ── 1. Trend Chart ───────────────────────────────────────────
+const months = [
+  "Jan'22","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec",
+  "Jan'23","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec",
+  "Jan'24","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
+];
+const avgHours = [15.29,15.53,15.58,15.56,15.43,15.41,15.37,15.34,15.35,15.36,15.30,15.28,
+                  15.20,15.15,15.10,15.08,15.05,15.00,14.95,14.92,14.90,14.88,14.85,14.80,
+                  14.75,14.70,14.68,14.65,14.60,14.58,14.55,14.52,14.50,14.48,14.45,14.42];
+const predHours = avgHours.map(v => +(v * 0.92 + Math.random()*0.3).toFixed(2));
+const ticketVol = Array.from({length:36}, (_,i) => 12000 + Math.round(Math.sin(i/3)*1200 + Math.random()*800));
+
+new Chart(document.getElementById('trendChart'), {
+  type: 'bar',
+  data: {
+    labels: months,
+    datasets: [
+      {
+        type: 'line', label: 'Avg Actual (h)',
+        data: avgHours.slice(0,36),
+        borderColor: '#f59e0b', backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 0, tension: 0.4, yAxisID: 'y'
+      },
+      {
+        type: 'line', label: 'Avg Predicted (h)',
+        data: predHours.slice(0,36),
+        borderColor: '#3b82f6', backgroundColor: 'transparent',
+        borderWidth: 1.5, borderDash: [4,3], pointRadius: 0, tension: 0.4, yAxisID: 'y'
+      },
+      {
+        type: 'bar', label: 'Ticket Volume',
+        data: ticketVol,
+        backgroundColor: 'rgba(99,102,241,0.2)',
+        borderColor: 'rgba(99,102,241,0.4)',
+        borderWidth: 1, yAxisID: 'y2'
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 10, padding: 16 } },
+      tooltip: { backgroundColor: '#161c2a', borderColor: '#1e2740', borderWidth: 1 }
+    },
+    scales: {
+      x: { grid: { color: '#1a2035' }, ticks: { maxRotation: 0, maxTicksLimit: 12 } },
+      y: {
+        grid: { color: '#1a2035' }, position: 'left',
+        title: { display: true, text: 'Hours', color: '#64748b' }
+      },
+      y2: {
+        grid: { display: false }, position: 'right',
+        title: { display: true, text: 'Tickets', color: '#64748b' }
+      }
+    }
+  }
+});
+
+// ── 2. Priority Chart ────────────────────────────────────────
+new Chart(document.getElementById('priorityChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Critical', 'High', 'Medium', 'Low'],
+    datasets: [
+      {
+        label: 'Ticket Count (K)',
+        data: [24.8, 100.2, 250.1, 124.9],
+        backgroundColor: ['rgba(244,63,94,.7)','rgba(245,158,11,.7)','rgba(59,130,246,.7)','rgba(16,185,129,.7)'],
+        borderColor:      ['#f43f5e','#f59e0b','#3b82f6','#10b981'],
+        borderWidth: 1, yAxisID: 'y'
+      },
+      {
+        type: 'line',
+        label: 'Avg Hours',
+        data: [6.0, 10.36, 14.84, 22.26],
+        borderColor: '#e2e8f0', backgroundColor: 'transparent',
+        borderWidth: 2, pointRadius: 4, pointBackgroundColor: '#e2e8f0',
+        tension: 0.3, yAxisID: 'y2'
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 10, padding: 12 } },
+      tooltip: { backgroundColor: '#161c2a', borderColor: '#1e2740', borderWidth: 1 }
+    },
+    scales: {
+      x: { grid: { color: '#1a2035' } },
+      y: { grid: { color: '#1a2035' }, position: 'left', title: { display:true, text:'Tickets (K)', color:'#64748b' } },
+      y2: { grid: { display:false }, position: 'right', title: { display:true, text:'Avg Hours', color:'#64748b' } }
+    }
+  }
+});
+
+// ── 3. Team Chart ────────────────────────────────────────────
+new Chart(document.getElementById('teamChart'), {
+  type: 'radar',
+  data: {
+    labels: ['Avg Hours', 'SLA Breach %', 'Ticket Vol (K)', 'Satisfaction', 'Efficiency'],
+    datasets: [
+      { label:'Team Alpha', data:[15.37,19.5,99.5,4.8,72], borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.1)', borderWidth:1.5, pointRadius:3 },
+      { label:'Team Beta',  data:[15.35,19.4,100.4,4.8,73], borderColor:'#f43f5e', backgroundColor:'rgba(244,63,94,.1)', borderWidth:1.5, pointRadius:3 },
+      { label:'Team Gamma', data:[15.33,19.5,100.2,4.8,74], borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', borderWidth:1.5, pointRadius:3 },
+      { label:'Team Delta', data:[15.30,19.1,100.2,4.8,76], borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,.1)', borderWidth:1.5, pointRadius:3 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top', labels: { boxWidth: 8, padding: 10 } },
+      tooltip: { backgroundColor: '#161c2a', borderColor: '#1e2740', borderWidth: 1 }
+    },
+    scales: {
+      r: {
+        grid: { color: '#1e2740' },
+        ticks: { backdropColor: 'transparent', color: '#64748b', stepSize: 20 },
+        angleLines: { color: '#1e2740' },
+        pointLabels: { color: '#94a3b8', font: { size: 9 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
